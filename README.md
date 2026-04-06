@@ -41,13 +41,7 @@ Deep Learning: YOLOv8 (Ultralytics)
 Frontend: HTML, CSS, JavaScript
 
 Project Structure
-├── app.py # Main Flask application (routes + API) 
-├── tracking.py # YOLOv8 detection & tracking logic 
-├── zone_editor.py # Zone drawing and management 
-├── templates/ 
-│  └── index.html # Dashboard UI (video + stats + charts) 
-   └── login.html # Login UI(Default: username:admin password:1234)
-└── zones.json # Saved zones (auto-generated) 
+├── app.py # Main Flask application (routes + API) ├── tracking.py # YOLOv8 detection & tracking logic ├── zone_editor.py # Zone drawing and management ├── templates/ │ └── index.html # Dashboard UI (video + stats + charts) ├── static/ # CSS, JS, assets (if any) ├── zones.json # Saved zones (auto-generated) ├── requirements.txt # Project dependencies └── README.md # Project documentation
 
 Installation & Setup
 1. Clone the Repository
