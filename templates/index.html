@@ -1,0 +1,369 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Smart Crowd Monitoring</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        * { margin:0; padding:0; box-sizing:border-box; }
+
+        body {
+            font-family: Arial;
+            background: #0f172a;
+            color: white;
+        }
+
+        .header {
+            background: #1e293b;
+            padding: 15px;
+            text-align: center;
+            position: relative;
+        }
+
+        .container {
+            display: flex;
+            gap: 20px;
+            padding: 20px;
+        }
+
+        .video-section {
+            flex: 2;
+            position: relative;
+        }
+
+        /* RIGHT SIDE PANEL */
+        .right-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .stats-section {
+            background: #1e293b;
+            padding: 20px;
+            border-radius: 10px;
+        }
+
+        /* NEW CHART SECTION (BOTTOM RIGHT) */
+        .chart-section {
+            background: #1e293b;
+            padding: 20px;
+            border-radius: 10px;
+            margin-top: auto;
+        }
+
+        img {
+            width: 100%;
+            border-radius: 10px;
+        }
+
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+
+        .chart-section canvas {
+            position: static;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: #334155;
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 8px;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            color: #4CAF50;
+        }
+
+        .zone-item {
+            background: #334155;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 6px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        button {
+            padding: 10px;
+            margin: 5px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+        }
+
+        .controls {
+            margin-top: 10px;
+            text-align: center;
+        }
+
+        .logout {
+            position: absolute;
+            right: 20px;
+            top: 15px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="header">
+    <h1>🚀 Smart Crowd Monitoring System</h1>
+    <p>Live Tracking • Heatmap • Zone Analytics</p>
+    <a href="/logout" class="logout">
+        <button>Logout</button>
+    </a>
+</div>
+
+<div class="container">
+
+    <!-- VIDEO -->
+    <div class="video-section">
+
+        <img src="{{ url_for('video_feed') }}" id="video">
+        <canvas id="drawCanvas"></canvas>
+
+        <div class="controls">
+            <button onclick="startDrawing()">✏ Draw</button>
+            <button onclick="addZone()">➕ Add Zone</button>
+            <button onclick="saveZones()">💾 Save</button>
+            <button onclick="clearZones()">🗑 Clear</button>
+        </div>
+
+    </div>
+
+    <!-- RIGHT SIDE -->
+    <div class="right-panel">
+
+        <!-- STATS -->
+        <div class="stats-section">
+
+            <h2>📊 Live Statistics</h2>
+
+            <div class="stat-card">
+                <h3>Total People</h3>
+                <div class="stat-value" id="total">0</div>
+            </div>
+
+            <h3>Zone Stats</h3>
+            <div id="zones"></div>
+
+            <div class="stat-card">
+                <small>Last Updated:</small>
+                <div id="timestamp">-</div>
+            </div>
+
+        </div>
+
+        <!-- CHARTS (BOTTOM RIGHT) -->
+        <div class="chart-section">
+
+            <h3>📊 Zone Bar Chart</h3>
+            <canvas id="barChart"></canvas>
+
+            <h3>📈 Zone Trend</h3>
+            <canvas id="lineChart"></canvas>
+
+        </div>
+
+    </div>
+
+</div>
+
+<script>
+const canvas = document.getElementById("drawCanvas");
+const ctx = canvas.getContext("2d");
+const video = document.getElementById("video");
+
+let zones = [];
+let currentZone = [];
+let drawing = false;
+
+let barChart, lineChart;
+let history = {};
+
+video.onload = () => {
+    canvas.width = video.clientWidth;
+    canvas.height = video.clientHeight;
+};
+
+function startDrawing(){
+    drawing = true;
+}
+
+canvas.addEventListener("click", function(e){
+    if(!drawing) return;
+
+    const rect = canvas.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    currentZone.push([x,y]);
+    drawZones();
+});
+
+function drawZones(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+
+    zones.forEach(zone=>{
+        ctx.beginPath();
+        ctx.moveTo(zone[0][0], zone[0][1]);
+
+        for(let i=1;i<zone.length;i++){
+            ctx.lineTo(zone[i][0], zone[i][1]);
+        }
+
+        ctx.closePath();
+        ctx.strokeStyle = "cyan";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    });
+
+    if(currentZone.length > 0){
+        ctx.beginPath();
+        ctx.moveTo(currentZone[0][0], currentZone[0][1]);
+
+        for(let i=1;i<currentZone.length;i++){
+            ctx.lineTo(currentZone[i][0], currentZone[i][1]);
+        }
+
+        ctx.strokeStyle = "yellow";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+    }
+}
+
+function addZone(){
+    if(currentZone.length >= 3){
+        zones.push([...currentZone]);
+        currentZone = [];
+        drawZones();
+    } else {
+        alert("Minimum 3 points required");
+    }
+}
+
+function clearZones(){
+    zones = [];
+    currentZone = [];
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+}
+
+function saveZones(){
+    fetch('/save_zones',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({zones:zones})
+    })
+    .then(()=>{
+        alert("Zones Saved!");
+        loadZones();
+    });
+}
+
+function loadZones(){
+    fetch('/get_zones')
+    .then(res=>res.json())
+    .then(data=>{
+        zones = data;
+        drawZones();
+    });
+}
+
+loadZones();
+
+// ========================
+// STATS + CHARTS
+// ========================
+function updateStats(){
+    fetch('/stats')
+    .then(res=>res.json())
+    .then(data=>{
+
+        document.getElementById('total').textContent = data.total;
+
+        const zonesDiv = document.getElementById('zones');
+        zonesDiv.innerHTML = '';
+
+        let labels = [];
+        let counts = [];
+
+        for (const [zone, info] of Object.entries(data.zones)) {
+
+            labels.push(zone);
+            counts.push(info.count);
+
+            let color = info.status === "Overcrowded" ? "red" : "#4CAF50";
+
+            const div = document.createElement('div');
+            div.className = "zone-item";
+
+            div.innerHTML = `
+                <span>${zone}</span>
+                <strong style="color:${color}">
+                    ${info.count} (${info.status})
+                </strong>
+            `;
+
+            zonesDiv.appendChild(div);
+
+            if(!history[zone]) history[zone] = [];
+            history[zone].push(info.count);
+            if(history[zone].length > 20) history[zone].shift();
+        }
+
+        // BAR CHART
+        if(!barChart){
+            barChart = new Chart(document.getElementById('barChart'), {
+                type: 'bar',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Zone Population',
+                        data: counts
+                    }]
+                }
+            });
+        } else {
+            barChart.data.labels = labels;
+            barChart.data.datasets[0].data = counts;
+            barChart.update();
+        }
+
+        // LINE CHART
+        if(!lineChart){
+            lineChart = new Chart(document.getElementById('lineChart'), {
+                type: 'line',
+                data: {
+                    labels: Array(20).fill(""),
+                    datasets: labels.map(zone => ({
+                        label: zone,
+                        data: history[zone]
+                    }))
+                }
+            });
+        } else {
+            lineChart.data.datasets = labels.map(zone => ({
+                label: zone,
+                data: history[zone]
+            }));
+            lineChart.update();
+        }
+
+        const date = new Date(data.timestamp * 1000);
+        document.getElementById('timestamp').textContent = date.toLocaleTimeString();
+    });
+}
+
+setInterval(updateStats,2000);
+updateStats();
+</script>
+
+</body>
+</html>
