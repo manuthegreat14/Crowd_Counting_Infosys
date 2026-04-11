@@ -9,6 +9,7 @@ Features
     ✅ Interactive web dashboard with statistics
     ✅ Person tracking with unique IDs
     ✅ Zone-wise people counting
+    ✅ Export CSV/PDF of hourly/daily counts
     
 System Architecture
 Camera Feed → YOLO Detection → Object Tracking → Zone Processing → Dashboard
@@ -25,14 +26,15 @@ Detect humans using YOLOv8
 Track individuals using unique IDs
 Maintain consistent tracking across frames
 
-4. Zone-Based Counting
+3. Zone-Based Counting
 Assign people to zones using bounding box logic
 Count individuals per zone in real-time
 
-6. Dashboard & Visualization
+4. Dashboard & Visualization
 Display total count and zone-wise data
 Real-time charts (bar & line graphs)
 Live statistics update
+Export CSV/PDF of hourly/daily counts
 
 Technologies Used
 Backend: Python, Flask
