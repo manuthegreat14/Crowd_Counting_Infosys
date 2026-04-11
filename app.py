@@ -1,6 +1,8 @@
-from flask import Flask, render_template, Response, jsonify, request, redirect, session
-import cv2, json, numpy as np, time
+from flask import Flask, render_template, Response, jsonify, request, redirect, session, send_file
+import cv2, json, numpy as np, time, csv
 from ultralytics import YOLO
+from reportlab.platypus import SimpleDocTemplate, Table
+from reportlab.lib import colors
 
 app = Flask(__name__)
 app.secret_key="1234"
@@ -10,6 +12,10 @@ cap = cv2.VideoCapture(0)
 
 heatmap=None
 
+
+# ======================
+# UTIL FUNCTIONS
+# ======================
 def load_zones():
     try:
         with open("zones.json") as f:
@@ -21,7 +27,9 @@ def point_in_zone(p,z):
     return cv2.pointPolygonTest(np.array(z,np.int32), p, False)>=0
 
 
+# ======================
 # LOGIN
+# ======================
 @app.route('/login',methods=["GET","POST"])
 def login():
     if request.method=="POST":
@@ -36,7 +44,9 @@ def logout():
     return redirect("/login")
 
 
-# VIDEO + HEATMAP
+# ======================
+# VIDEO + HEATMAP + HISTORY
+# ======================
 def generate():
     global heatmap
 
@@ -47,7 +57,7 @@ def generate():
         if heatmap is None:
             heatmap = np.zeros((frame.shape[0],frame.shape[1]),dtype=np.float32)
 
-        results = model.track(frame,persist=True)
+        results = model.track(frame,classes=[0],persist=True)
         counts=[0]*len(zones)
 
         if results[0].boxes.id is not None:
@@ -63,9 +73,33 @@ def generate():
                     if point_in_zone((cx,cy),z):
                         counts[i]+=1
 
+        # SAVE CURRENT COUNTS
         with open("counts.json","w") as f:
             json.dump(counts,f)
 
+        # ======================
+        # SAVE HISTORY
+        # ======================
+        record = {
+            "timestamp": time.time(),
+            "counts": counts
+        }
+
+        try:
+            with open("history.json","r") as f:
+                history = json.load(f)
+        except:
+            history = []
+
+        history.append(record)
+
+        # keep last 500 entries
+        history = history[-500:]
+
+        with open("history.json","w") as f:
+            json.dump(history,f)
+
+        # HEATMAP
         heat = cv2.normalize(heatmap,None,0,255,cv2.NORM_MINMAX)
         heat = cv2.applyColorMap(heat.astype(np.uint8),cv2.COLORMAP_JET)
         frame = cv2.addWeighted(frame,0.7,heat,0.3,0)
@@ -73,12 +107,15 @@ def generate():
         _,buf=cv2.imencode('.jpg',frame)
         yield(b'--frame\r\nContent-Type:image/jpeg\r\n\r\n'+buf.tobytes()+b'\r\n')
 
+
 @app.route('/video_feed')
 def video_feed():
     return Response(generate(),mimetype='multipart/x-mixed-replace; boundary=frame')
 
 
+# ======================
 # STATS
+# ======================
 @app.route('/stats')
 def stats():
     zones = load_zones()
@@ -97,7 +134,72 @@ def stats():
     return jsonify({"total":sum(counts),"zones":data,"timestamp":time.time()})
 
 
-# ZONE SAVE (used by BOTH editors)
+# ======================
+# EXPORT CSV
+# ======================
+@app.route('/export_csv')
+def export_csv():
+    try:
+        with open("history.json") as f:
+            history = json.load(f)
+    except:
+        return "No data available"
+
+    filename = "report.csv"
+
+    with open(filename, "w", newline="") as f:
+        writer = csv.writer(f)
+
+        # Dynamic header
+        max_zones = max(len(entry["counts"]) for entry in history) if history else 0
+        header = ["Time"] + [f"Zone {i+1}" for i in range(max_zones)]
+        writer.writerow(header)
+
+        for entry in history:
+            row = [time.strftime('%H:%M:%S', time.localtime(entry["timestamp"]))]
+            row.extend(entry["counts"])
+            writer.writerow(row)
+
+    return send_file(filename, as_attachment=True)
+
+
+# ======================
+# EXPORT PDF
+# ======================
+@app.route('/export_pdf')
+def export_pdf():
+    try:
+        with open("history.json") as f:
+            history = json.load(f)
+    except:
+        return "No data available"
+
+    filename = "report.pdf"
+    doc = SimpleDocTemplate(filename)
+
+    max_zones = max(len(entry["counts"]) for entry in history) if history else 0
+    data = [["Time"] + [f"Zone {i+1}" for i in range(max_zones)]]
+
+    for entry in history:
+        row = [time.strftime('%H:%M:%S', time.localtime(entry["timestamp"]))]
+        row.extend(entry["counts"])
+        data.append(row)
+
+    table = Table(data)
+    table.setStyle([
+        ('BACKGROUND', (0,0), (-1,0), colors.grey),
+        ('TEXTCOLOR', (0,0), (-1,0), colors.white),
+        ('GRID', (0,0), (-1,-1), 1, colors.black)
+    ])
+
+    doc.build([table])
+
+    return send_file(filename, as_attachment=True)
+
+
+# ======================
+# ZONE SAVE
+# ======================
 @app.route('/save_zones',methods=['POST'])
 def save_zones():
     new_zones = request.json["zones"]
@@ -108,7 +210,6 @@ def save_zones():
     except:
         existing = []
 
-    # append instead of overwrite
     updated = existing + new_zones
 
     with open("zones.json","w") as f:
@@ -121,6 +222,9 @@ def get_zones():
     return jsonify(load_zones())
 
 
+# ======================
+# HOME
+# ======================
 @app.route('/')
 def home():
     if "user" not in session:
@@ -128,5 +232,8 @@ def home():
     return render_template("index.html")
 
 
+# ======================
+# RUN
+# ======================
 if __name__=="__main__":
     app.run(debug=True)

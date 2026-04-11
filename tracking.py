@@ -37,7 +37,7 @@ while True:
             zone_id_map[i] = set()
 
     # YOLO tracking
-    results = model.track(frame, persist=True)
+    results = model.track(frame, classes=[0], persist=True)
 
     zone_counts = [0]*len(zones)
 
