@@ -11,7 +11,8 @@ model = YOLO("yolov8n.pt")
 cap = cv2.VideoCapture(0)
 
 heatmap=None
-
+current_frame=None
+use_image=False
 
 # ======================
 # UTIL FUNCTIONS
@@ -26,7 +27,6 @@ def load_zones():
 def point_in_zone(p,z):
     return cv2.pointPolygonTest(np.array(z,np.int32), p, False)>=0
 
-
 # ======================
 # LOGIN
 # ======================
@@ -35,7 +35,7 @@ def login():
     if request.method=="POST":
         if request.form["username"]=="admin" and request.form["password"]=="1234":
             session["user"]="admin"
-            return redirect("/")
+            return redirect("/mode")
     return render_template("login.html")
 
 @app.route('/logout')
@@ -43,24 +43,61 @@ def logout():
     session.pop("user",None)
     return redirect("/login")
 
+# ======================
+# MODE SELECTION
+# ======================
+@app.route('/mode')
+def mode():
+    if "user" not in session:
+        return redirect("/login")
+    return render_template("mode.html")
+
+@app.route('/live')
+def live():
+    global use_image
+    use_image = False
+    return redirect("/")
+
+@app.route('/upload', methods=["GET","POST"])
+def upload():
+    global current_frame, use_image
+
+    if request.method == "POST":
+        file = request.files['image']
+        npimg = np.frombuffer(file.read(), np.uint8)
+        current_frame = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+        use_image = True
+        return redirect("/")
+
+    return render_template("upload.html")
 
 # ======================
-# VIDEO + HEATMAP + HISTORY
+# VIDEO / IMAGE STREAM
 # ======================
 def generate():
-    global heatmap
+    global heatmap, current_frame, use_image
 
     while True:
-        ret,frame = cap.read()
+        if use_image and current_frame is not None:
+            frame = current_frame.copy()
+            time.sleep(0.2)
+        else:
+            ret, frame = cap.read()
+
         zones = load_zones()
 
-        if heatmap is None:
+        if heatmap is None or use_image:
             heatmap = np.zeros((frame.shape[0],frame.shape[1]),dtype=np.float32)
 
-        results = model.track(frame,classes=[0],persist=True)
+        # Use detection for image, tracking for video
+        if use_image:
+            results = model(frame, classes=[0])
+        else:
+            results = model.track(frame, classes=[0], persist=True)
+
         counts=[0]*len(zones)
 
-        if results[0].boxes.id is not None:
+        if results[0].boxes is not None:
             boxes = results[0].boxes.xyxy.cpu().numpy()
 
             for b in boxes:
@@ -73,13 +110,9 @@ def generate():
                     if point_in_zone((cx,cy),z):
                         counts[i]+=1
 
-        # SAVE CURRENT COUNTS
         with open("counts.json","w") as f:
             json.dump(counts,f)
 
-        # ======================
-        # SAVE HISTORY
-        # ======================
         record = {
             "timestamp": time.time(),
             "counts": counts
@@ -92,14 +125,11 @@ def generate():
             history = []
 
         history.append(record)
-
-        # keep last 500 entries
         history = history[-500:]
 
         with open("history.json","w") as f:
             json.dump(history,f)
 
-        # HEATMAP
         heat = cv2.normalize(heatmap,None,0,255,cv2.NORM_MINMAX)
         heat = cv2.applyColorMap(heat.astype(np.uint8),cv2.COLORMAP_JET)
         frame = cv2.addWeighted(frame,0.7,heat,0.3,0)
@@ -107,18 +137,15 @@ def generate():
         _,buf=cv2.imencode('.jpg',frame)
         yield(b'--frame\r\nContent-Type:image/jpeg\r\n\r\n'+buf.tobytes()+b'\r\n')
 
-
 @app.route('/video_feed')
 def video_feed():
     return Response(generate(),mimetype='multipart/x-mixed-replace; boundary=frame')
-
 
 # ======================
 # STATS
 # ======================
 @app.route('/stats')
 def stats():
-    zones = load_zones()
     try:
         counts=json.load(open("counts.json"))
     except:
@@ -132,7 +159,6 @@ def stats():
         }
 
     return jsonify({"total":sum(counts),"zones":data,"timestamp":time.time()})
-
 
 # ======================
 # EXPORT CSV
@@ -150,7 +176,6 @@ def export_csv():
     with open(filename, "w", newline="") as f:
         writer = csv.writer(f)
 
-        # Dynamic header
         max_zones = max(len(entry["counts"]) for entry in history) if history else 0
         header = ["Time"] + [f"Zone {i+1}" for i in range(max_zones)]
         writer.writerow(header)
@@ -161,7 +186,6 @@ def export_csv():
             writer.writerow(row)
 
     return send_file(filename, as_attachment=True)
-
 
 # ======================
 # EXPORT PDF
@@ -193,12 +217,10 @@ def export_pdf():
     ])
 
     doc.build([table])
-
     return send_file(filename, as_attachment=True)
 
-
 # ======================
-# ZONE SAVE
+# ZONES
 # ======================
 @app.route('/save_zones',methods=['POST'])
 def save_zones():
@@ -221,7 +243,6 @@ def save_zones():
 def get_zones():
     return jsonify(load_zones())
 
-
 # ======================
 # HOME
 # ======================
@@ -230,7 +251,6 @@ def home():
     if "user" not in session:
         return redirect("/login")
     return render_template("index.html")
-
 
 # ======================
 # RUN
