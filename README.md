@@ -16,31 +16,33 @@ Camera Feed → YOLO Detection → Object Tracking → Zone Processing → Dashb
 
 Modules
 
-1. Video Input & Zone Management
-Capture video from webcam or IP camera
-Draw and manage multiple zones (ROI)
-Save and reload zone configurations
+1. Video Input & Zone Management:
+Capture video from webcam or IP camera,
+Draw and manage multiple zones (ROI),
+Save and reload zone configurations.
 
-2. People Detection & Tracking
-Detect humans using YOLOv8
-Track individuals using unique IDs
-Maintain consistent tracking across frames
+2. People Detection & Tracking:
+Detect humans using YOLOv8,
+Track individuals using unique IDs,
+Maintain consistent tracking across frames.
 
-3. Zone-Based Counting
-Assign people to zones using bounding box logic
-Count individuals per zone in real-time
+3. Zone-Based Counting:
+Assign people to zones using bounding box logic,
+Count individuals per zone in real-time.
 
-4. Dashboard & Visualization
-Display total count and zone-wise data
-Real-time charts (bar & line graphs)
-Live statistics update
-Export CSV/PDF of hourly/daily counts
+4. Dashboard & Visualization:
+Display total count and zone-wise data,
+Real-time charts (bar & line graphs),
+Live statistics update,
+Export CSV/PDF of hourly/daily counts.
 
 Technologies Used
+```
 Backend: Python, Flask
 Computer Vision: OpenCV
 Deep Learning: YOLOv8 (Ultralytics)
 Frontend: HTML, CSS, JavaScript
+```
 ```bash
 Project Structure
 ├── app.py # Main Flask application (routes + API) 
@@ -49,6 +51,8 @@ Project Structure
 ├── templates/ 
 │ └── index.html # Dashboard UI (video + stats + charts)
   └── login.html # Login UI(Default username:admin ,password:1234)
+  └── mode.html # Changing modes
+  └── upload.html # To upload image for analusis
 └── zones.json # Saved zones (auto-generated) 
 ```
 Installation & Setup
